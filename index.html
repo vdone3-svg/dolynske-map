@@ -88,14 +88,56 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   .po-body svg{width:100vw!important;height:100vh!important;box-shadow:none!important}
   @page{size:auto;margin:0mm}
 }
+
+html,body{height:100%;overflow:hidden}
+#app{height:100vh;height:100dvh}
+#tab-map{position:relative}
+.topbar{display:flex;align-items:center;gap:8px;background:#141a14;border-bottom:2px solid #2d4a2d;padding:0 8px;flex-shrink:0;padding-top:env(safe-area-inset-top);position:relative;z-index:3000}
+.tb-title{color:#8dcc8d;font-weight:800;font-size:14px;white-space:nowrap;padding:0 6px}
+.tb-title small{color:#7a9a7a;font-weight:600;font-size:11px;margin-left:6px}
+.tabs{display:flex;flex:1;border:none;background:none;min-width:0}
+.tab{padding:12px 16px}
+.menu-btn{margin-left:auto;background:#1a3a1a;border:1.5px solid #4caf50;color:#cfe8cf;border-radius:8px;font-size:15px;font-weight:700;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.menu{display:none;position:absolute;right:8px;top:100%;margin-top:6px;background:#141e14;border:1.5px solid #2d4a2d;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.6);min-width:230px;overflow:hidden}
+.menu.open{display:block}
+.menu button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:none;border-bottom:1px solid #223322;color:#dde;font-size:15px;padding:14px 16px;text-align:left;cursor:pointer}
+.menu button:last-child{border-bottom:none}
+.menu button:hover,.menu button:active{background:#1e3a1e}
+.print-btn,#sel-toggle-btn,.map-info{display:none!important}
+.legend.collapsed .li{display:none}
+.legend-h{font-size:11px;font-weight:700;color:#8dcc8d;cursor:pointer;user-select:none}
+#sel-done{background:#1a3a1a;border:1px solid #4caf50;color:#8dcc8d;padding:2px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-weight:700}
+@media (max-width:700px){
+  .tb-title small{display:none}
+  .tb-title{font-size:13px;padding:0 2px}
+  .tab{padding:10px 11px;font-size:20px}
+  .tt{display:none}
+  .menu-btn .mb-txt{display:none}
+  .legend{bottom:22px!important;right:8px!important;padding:7px 10px!important;font-size:11px!important;line-height:1.7!important}
+  #sel-panel{top:auto!important;bottom:12px!important;left:10px!important;right:10px!important;min-width:0!important;padding:8px 12px!important}
+  #sel-ha{font-size:22px!important}
+  #sel-list{max-height:70px!important}
+  .stats-panel{padding:12px}
+  #field-selector-grid{grid-template-columns:repeat(2,1fr)!important}
+}
 </style>
 </head>
 <body>
 <div id="app">
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('map')">🗺 Карта</div>
-    <div class="tab" onclick="switchTab('fields')">🌾 Поля</div>
-    <div class="tab" onclick="switchTab('stats')">📊 Статистика</div>
+  <div class="topbar">
+    <div class="tb-title">Долинське<small>725 га · 13 полів</small></div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('map')">🗺<span class="tt"> Карта</span></div>
+      <div class="tab" onclick="switchTab('fields')">🌾<span class="tt"> Поля</span></div>
+      <div class="tab" onclick="switchTab('stats')">📊<span class="tt"> Статистика</span></div>
+    </div>
+    <button class="menu-btn" onclick="toggleMenu(event)">☰<span class="mb-txt"> Меню</span></button>
+    <div class="menu" id="menu">
+      <button onclick="menuDo(()=>{switchTab('map');if(!selectionMode)toggleSelectionMode();})">✔ Вибрати ділянки (калькулятор га)</button>
+      <button onclick="menuDo(()=>{switchTab('map');openPrintSelector();})">🖨 Друк поля A4</button>
+      <button onclick="menuDo(()=>{switchTab('map');fitAll();})">🎯 Показати всі поля</button>
+      <button onclick="menuDo(toggleLegend)">🎨 Легенда показати / сховати</button>
+    </div>
   </div>
   <div id="tab-map" class="panel active">
     <div class="map-info" id="map-info-bar">ТОВ «Долинське» · <span style="color:#66cc66">~731 га факт.</span> · <span style="color:#ffcc00">13 полів</span></div>
@@ -104,7 +146,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="sel-panel" style="display:none;position:absolute;top:10px;right:10px;z-index:1002;background:rgba(10,20,10,.97);border:2px solid #ffd700;border-radius:12px;padding:10px 16px;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.7)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
         <span style="font-size:12px;color:#ffd700;font-weight:800;text-transform:uppercase;letter-spacing:.5px">✔ Вибрано</span>
-        <button onclick="clearSelection()" style="margin-left:auto;background:#3a0a0a;border:1px solid #6a2a2a;color:#ff8888;padding:2px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-weight:700">✕ Скинути</button>
+        <button id="sel-done" onclick="toggleSelectionMode()" style="margin-left:auto">✓ Готово</button><button onclick="clearSelection()" style="background:#3a0a0a;border:1px solid #6a2a2a;color:#ff8888;padding:2px 10px;border-radius:5px;font-size:11px;cursor:pointer;font-weight:700">✕ Скинути</button>
       </div>
       <div style="font-size:28px;font-weight:900;color:#ffd700;line-height:1" id="sel-ha">0.00 га</div>
       <div style="font-size:11px;color:#aaa;margin-top:2px" id="sel-count">0 ділянок</div>
@@ -112,7 +154,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <button id="sel-toggle-btn" onclick="toggleSelectionMode()" style="position:absolute;top:10px;right:10px;z-index:1002;background:#1a3a0a;border:2px solid #8acc4a;border-radius:8px;color:#8dcc8d;font-size:13px;font-weight:700;padding:7px 14px;cursor:pointer">☰ Вибрати ділянки</button>
     <div id="map"></div>
-    <div class="legend">
+    <div class="legend" id="legend"><div class="legend-h" onclick="toggleLegend()">🎨 Легенда</div>
       <div class="li"><div class="lb" style="background:#4caf50;border:2px solid #2a8a2a"></div>Оренда</div>
       <div class="li"><div class="lb" style="background:#ffd700;border:2px solid #cc8800"></div>★ Власні</div>
       <div class="li"><div class="lb" style="background:#ff6b2b;border:2px solid #c0390a"></div>⇄ Наші → віддано</div>
@@ -335,7 +377,15 @@ FIELDS.forEach(f=>{
 
 function updateLabels(){const z=mainMap.getZoom();labels.forEach(m=>{z>=13?m.addTo(mainMap):mainMap.removeLayer(m);});}
 mainMap.on('zoomend',updateLabels);
-mainMap.fitBounds(mainGeoLayer.getBounds().extend(theirGeoLayer.getBounds()),{padding:[30,30]});
+function fitAll(){mainMap.invalidateSize();mainMap.fitBounds(mainGeoLayer.getBounds().extend(theirGeoLayer.getBounds()),{padding:[20,20]});}
+fitAll();setTimeout(fitAll,300);
+window.addEventListener('resize',()=>{clearTimeout(window._rz);window._rz=setTimeout(()=>mainMap.invalidateSize(),150);});
+window.addEventListener('orientationchange',()=>setTimeout(fitAll,400));
+function toggleMenu(e){e.stopPropagation();document.getElementById('menu').classList.toggle('open');}
+function menuDo(fn){document.getElementById('menu').classList.remove('open');fn();}
+document.addEventListener('click',e=>{const m=document.getElementById('menu');if(m&&!m.contains(e.target))m.classList.remove('open');});
+function toggleLegend(){document.getElementById('legend').classList.toggle('collapsed');}
+if(window.innerWidth<=700)document.getElementById('legend').classList.add('collapsed');
 updateLabels();
 
 // ===== PRINT SELECTOR =====

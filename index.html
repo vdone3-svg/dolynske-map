@@ -563,8 +563,9 @@ function buildPrintPage(fieldName){
 
   // Table rows
   const ownParcels=features.filter(f=>isOwn(f.properties.owner));
-  const exchParcels=features.filter(f=>exchShorts.has(f.properties.short));
-  const rentParcels=features.filter(f=>!isOwn(f.properties.owner)&&!exchShorts.has(f.properties.short));
+  const isExchShort=s=>fieldExchOut.has(s)||fieldExchIn.has(s);
+  const exchParcels=features.filter(f=>isExchShort(f.properties.short));
+  const rentParcels=features.filter(f=>!isOwn(f.properties.owner)&&!isExchShort(f.properties.short));
   const sorted=[...ownParcels,...exchParcels,...rentParcels];
 
   const ROW_H=15;
@@ -696,7 +697,7 @@ function buildPrintPage(fieldName){
 
   sorted.forEach((f,ri)=>{
     const p=f.properties;
-    const isE=exchShorts.has(p.short);
+    const isE=isExchShort(p.short);
     const isO=isOwn(p.owner);
     const ry=TABLE_HEADER_H+ri*ROW_H;
     const bg=ri%2===0?'#f4faf4':'#fff';

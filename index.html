@@ -682,13 +682,15 @@ function printField(name){
   document.getElementById('po-body').innerHTML=result.svg;
   (function(){const L=result.landscape;let st=document.getElementById('page-style');
    if(!st){st=document.createElement('style');st.id='page-style';document.head.appendChild(st);}
-   const w=L?'285mm':'198mm',h=L?'198mm':'285mm';
-   st.textContent='@media print{@page{size:A4 '+(L?'landscape':'portrait')+';margin:6mm}'+
-   'html,body{width:auto!important;height:auto!important}'+
-   '#print-overlay{position:static!important;display:block!important}'+
-   '.po-body{display:block!important;padding:0!important;overflow:hidden!important;width:'+w+'!important;height:'+h+'!important}'+
-   '.po-body svg{display:block!important;width:'+w+'!important;height:'+h+'!important;max-width:none!important}}';
-   const sv=document.querySelector('#po-body svg');if(sv)sv.setAttribute('preserveAspectRatio','xMidYMin meet');})();
+   /* консервативні розміри: Safari/iOS додає свої поля й колонтитули */
+   const w=L?'255mm':'178mm',h=L?'160mm':'240mm';
+   st.textContent='@media print{@page{size:A4 '+(L?'landscape':'portrait')+';margin:8mm}'+
+   'html,body{margin:0!important;padding:0!important;width:'+w+'!important;height:'+h+'!important;max-height:'+h+'!important;overflow:hidden!important}'+
+   '#app,.po-toolbar{display:none!important}'+
+   '#print-overlay{position:static!important;display:block!important;margin:0 auto!important;padding:0!important;width:'+w+'!important;height:'+h+'!important;overflow:hidden!important;page-break-after:avoid!important;break-after:avoid!important}'+
+   '.po-body{display:block!important;margin:0!important;padding:0!important;overflow:hidden!important;width:'+w+'!important;height:'+h+'!important}'+
+   '.po-body svg{display:block!important;width:'+w+'!important;height:'+h+'!important;max-width:none!important;box-shadow:none!important}}';
+   const sv=document.querySelector('#po-body svg');if(sv){sv.setAttribute('preserveAspectRatio','xMidYMin meet');}})();
   document.getElementById('print-overlay').classList.add('show');
 }
 

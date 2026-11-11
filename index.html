@@ -120,6 +120,13 @@ html,body{height:100%;overflow:hidden}
   .stats-panel{padding:12px}
   #field-selector-grid{grid-template-columns:repeat(2,1fr)!important}
 }
+@media print{
+  html,body{height:auto!important;overflow:visible!important;background:#fff!important}
+  #app{display:none!important}
+  #print-overlay{position:static!important;display:block!important;inset:auto!important}
+  .po-body{display:block!important;overflow:visible!important}
+  .po-body svg{width:100%!important;height:auto!important;max-height:100vh}
+}
 </style>
 </head>
 <body>
@@ -518,16 +525,16 @@ function buildPrintPage(fieldName){
 
   // Colors — правильні на основі ftype + fieldExchOut/In
   function fillColor(p){
-    if(fieldExchOut.has(p.short)||p.ftype==='exchanged_out') return '#ffb380'; // помаранчевий: наші — víddali
-    if(fieldExchIn.has(p.short)||p.ftype==='exchanged_in') return '#a0c4ff';   // синій: чужі — otrimali
-    if(isOwn(p.owner)) return '#ffe57a';
-    return '#a8e6a8';
+    if(fieldExchOut.has(p.short)||p.ftype==='exchanged_out') return 'url(#hatchOut)'; // помаранчевий: наші — víddali
+    if(fieldExchIn.has(p.short)||p.ftype==='exchanged_in') return '#b8b8ff';   // синій: чужі — otrimali
+    if(isOwn(p.owner)) return 'url(#ownPat)';
+    return '#b3ecff';
   }
   function strokeColor(p){
-    if(fieldExchOut.has(p.short)||p.ftype==='exchanged_out') return '#cc3300';
-    if(fieldExchIn.has(p.short)||p.ftype==='exchanged_in') return '#0044cc';
-    if(isOwn(p.owner)) return '#996600';
-    return '#1a6a1a';
+    if(fieldExchOut.has(p.short)||p.ftype==='exchanged_out') return '#222222';
+    if(fieldExchIn.has(p.short)||p.ftype==='exchanged_in') return '#1a1aaa';
+    if(isOwn(p.owner)) return '#8a0a8a';
+    return '#006a99';
   }
 
   let svgPolygons='',svgLabels='';
@@ -538,7 +545,7 @@ function buildPrintPage(fieldName){
     const fill=fillColor(p),stroke=strokeColor(p);
     const sdash=fieldExchIn.has(p.short)||p.ftype==='exchanged_in'?'stroke-dasharray="8 4"':'';
     rings.forEach(ring=>{
-      svgPolygons+=`<polygon points="${ringToPoints(ring)}" fill="${fill}" stroke="${stroke}" stroke-width="1.8" ${sdash} fill-opacity="0.88"/>`;
+      svgPolygons+=`<polygon points="${ringToPoints(ring)}" fill="${fill}" stroke="${stroke}" stroke-width="${isOwn(p.owner)?2.4:1.8}" ${sdash}${(fieldExchOut.has(p.short)||p.ftype==='exchanged_out')?' stroke-dasharray="3 2"':''} fill-opacity="0.92"/>`;
     });
     // Label at centroid
     const [cx,cy]=centroid(rings[0]);
@@ -554,10 +561,10 @@ function buildPrintPage(fieldName){
 
   // Legend (top-right corner of map)
   const legendItems=[
-    {fill:'#a8e6a8',stroke:'#1a6a1a',dash:'',label:'Оренда'},
-    {fill:'#ffe57a',stroke:'#996600',dash:'',label:'★ Власна'},
-    {fill:'#a0c4ff',stroke:'#0044cc',dash:'stroke-dasharray="6 3"',label:'⇄ Обмін (отримали)'},
-    {fill:'#ffb380',stroke:'#cc3300',dash:'',label:'⇄ Обмін (віддали)'},
+    {fill:'#b3ecff',stroke:'#006a99',dash:'',label:'Оренда'},
+    {fill:'url(#ownPat)',stroke:'#8a0a8a',dash:'',label:'★ Власна'},
+    {fill:'#b8b8ff',stroke:'#1a1aaa',dash:'stroke-dasharray="6 3"',label:'⇄ Обмін (отримали)'},
+    {fill:'url(#hatchOut)',stroke:'#222222',dash:'stroke-dasharray="2 2"',label:'⇄ Обмін (віддали)'},
   ];
   let legendSvg='';
   const lgW=135,lgH=legendItems.length*20+10;
@@ -582,10 +589,10 @@ function buildPrintPage(fieldName){
   const rentArea=rentParcels.reduce((a,f)=>a+f.properties.area,0);
 
   const headerSvg=`
-    <rect x="0" y="0" width="${pageW}" height="${HEADER_H}" fill="#1a4a1a"/>
+    <rect x="0" y="0" width="${pageW}" height="${HEADER_H}" fill="#1e2a4a"/>
     <text x="12" y="22" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">🌾 Поле ${fieldName}</text>
-    <text x="${pageW-10}" y="13" text-anchor="end" font-family="Arial,sans-serif" font-size="9.5" fill="#b0d4b0">${field.area.toFixed(2)} га · ${field.shorts.length} ділянок</text>
-    <text x="${pageW-10}" y="27" text-anchor="end" font-family="Arial,sans-serif" font-size="8.5" fill="#7aaa7a">★ власних: ${ownArea.toFixed(2)} га  ·  ⇄ обмін: ${exchArea.toFixed(2)} га  ·  оренда: ${rentArea.toFixed(2)} га</text>`;
+    <text x="${pageW-10}" y="13" text-anchor="end" font-family="Arial,sans-serif" font-size="9.5" fill="#c8d0e8">${field.area.toFixed(2)} га · ${field.shorts.length} ділянок</text>
+    <text x="${pageW-10}" y="27" text-anchor="end" font-family="Arial,sans-serif" font-size="8.5" fill="#a8b4d4">★ власних: ${ownArea.toFixed(2)} га  ·  ⇄ обмін: ${exchArea.toFixed(2)} га  ·  оренда: ${rentArea.toFixed(2)} га</text>`;
 
   // ---- EXCHANGE INFO BLOCK ----
   let exchBlockSvg='';
@@ -607,7 +614,7 @@ function buildPrintPage(fieldName){
   const tableStartY=HEADER_H+MAP_H+EXCH_H+4;
 
   let tableSvg=`<g transform="translate(${tableX},${tableStartY})">`;
-  tableSvg+=`<rect x="0" y="0" width="${tableW}" height="${TABLE_HEADER_H}" fill="#1a4a1a" rx="2"/>`;
+  tableSvg+=`<rect x="0" y="0" width="${tableW}" height="${TABLE_HEADER_H}" fill="#1e2a4a" rx="2"/>`;
   const headers=['Ділянка','Пл, га','Орендодавець / Власник','Кадастровий номер','Статус'];
   headers.forEach((h,i)=>{
     tableSvg+=`<text x="${colX[i]+colWidths[i]/2}" y="14" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="700" fill="#fff">${h}</text>`;
@@ -618,12 +625,13 @@ function buildPrintPage(fieldName){
     const isE=isExchShort(p.short);
     const isO=isOwn(p.owner);
     const ry=TABLE_HEADER_H+ri*ROW_H;
-    const bg=ri%2===0?'#f4faf4':'#fff';
-    const statusTxt=isE?'⇄ обмін':isO?'★ власна':'оренда';
-    const statusFill=isE?'#0044cc':isO?'#996600':'#1a6a1a';
+    const bg=ri%2===0?'#f4f6fa':'#fff';
+    const isOut=p.ftype==='exchanged_out';
+    const statusTxt=isOut?'⇄↑ віддали':isE?'⇄↓ отримали':isO?'★ власна':'оренда';
+    const statusFill=isOut?'#333333':isE?'#1a1aaa':isO?'#8a0a8a':'#006a99';
     tableSvg+=`<rect x="0" y="${ry}" width="${tableW}" height="${ROW_H}" fill="${bg}"/>`;
-    tableSvg+=`<line x1="0" y1="${ry+ROW_H}" x2="${tableW}" y2="${ry+ROW_H}" stroke="#e0e8e0" stroke-width="0.5"/>`;
-    const dotFill=isE?'#4488ff':isO?'#ffd700':'#4caf50';
+    tableSvg+=`<line x1="0" y1="${ry+ROW_H}" x2="${tableW}" y2="${ry+ROW_H}" stroke="#e0e4ee" stroke-width="0.5"/>`;
+    const dotFill=isOut?'#777777':isE?'#5a5aee':isO?'#d050d0':'#4ab8e8';
     tableSvg+=`<circle cx="${colX[0]+9}" cy="${ry+ROW_H/2}" r="4.5" fill="${dotFill}" stroke="${statusFill}" stroke-width="1"/>`;
     tableSvg+=`<text x="${colX[0]+18}" y="${ry+ROW_H-4}" font-family="Arial,sans-serif" font-size="9.5" font-weight="900" fill="#1a1a1a">${p.short}</text>`;
     tableSvg+=`<text x="${colX[1]+colWidths[1]/2}" y="${ry+ROW_H-4}" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" font-weight="700" fill="#222">${p.area.toFixed(2)}</text>`;
@@ -634,13 +642,13 @@ function buildPrintPage(fieldName){
   });
 
   const footY=TABLE_HEADER_H+sorted.length*ROW_H;
-  tableSvg+=`<rect x="0" y="${footY}" width="${tableW}" height="${TABLE_FOOTER_H}" fill="#dff0df"/>`;
-  tableSvg+=`<text x="6" y="${footY+12}" font-family="Arial,sans-serif" font-size="9.5" font-weight="700" fill="#1a4a1a">РАЗОМ: ${field.area.toFixed(2)} га  |  ${sorted.length} ділянок</text>`;
+  tableSvg+=`<rect x="0" y="${footY}" width="${tableW}" height="${TABLE_FOOTER_H}" fill="#e0e8f5"/>`;
+  tableSvg+=`<text x="6" y="${footY+12}" font-family="Arial,sans-serif" font-size="9.5" font-weight="700" fill="#1e2a4a">РАЗОМ: ${field.area.toFixed(2)} га  |  ${sorted.length} ділянок</text>`;
   tableSvg+=`<text x="${tableW-6}" y="${footY+12}" text-anchor="end" font-family="Arial,sans-serif" font-size="8.5" fill="#555">Оренда: ${rentArea.toFixed(2)} га  Власних: ${ownArea.toFixed(2)} га  Обмін: ${exchArea.toFixed(2)} га</text>`;
   colX.slice(1,-1).forEach(x=>{
     tableSvg+=`<line x1="${x}" y1="0" x2="${x}" y2="${footY+TABLE_FOOTER_H}" stroke="#ccc" stroke-width="0.6"/>`;
   });
-  tableSvg+=`<rect x="0" y="0" width="${tableW}" height="${footY+TABLE_FOOTER_H}" fill="none" stroke="#2a7a2a" stroke-width="1.2" rx="2"/>`;
+  tableSvg+=`<rect x="0" y="0" width="${tableW}" height="${footY+TABLE_FOOTER_H}" fill="none" stroke="#2a3a6a" stroke-width="1.2" rx="2"/>`;
   tableSvg+='</g>';
 
   // Footer
@@ -649,11 +657,11 @@ function buildPrintPage(fieldName){
 
   // Map background
   const mapY=HEADER_H;
-  const mapBg=`<rect x="0" y="${mapY}" width="${pageW}" height="${MAP_H}" fill="#edf4ed"/>`;
-  const mapFrame=`<rect x="0" y="${mapY}" width="${pageW}" height="${MAP_H}" fill="none" stroke="#2a7a2a" stroke-width="1"/>`;
-  const divider=`<line x1="0" y1="${exchY}" x2="${pageW}" y2="${exchY}" stroke="#2a7a2a" stroke-width="1.5"/>`;
+  const mapBg=`<rect x="0" y="${mapY}" width="${pageW}" height="${MAP_H}" fill="#f6f8fc"/>`;
+  const mapFrame=`<rect x="0" y="${mapY}" width="${pageW}" height="${MAP_H}" fill="none" stroke="#2a3a6a" stroke-width="1"/>`;
+  const divider=`<line x1="0" y1="${exchY}" x2="${pageW}" y2="${exchY}" stroke="#2a3a6a" stroke-width="1.5"/>`;
 
-  const svgContent=`<svg xmlns="http://www.w3.org/2000/svg" width="${pageW}" height="${pageH}" viewBox="0 0 ${pageW} ${pageH}" style="background:#fff;display:block">
+  const svgContent=`<svg xmlns="http://www.w3.org/2000/svg" width="${pageW}" height="${pageH}" viewBox="0 0 ${pageW} ${pageH}" style="background:#fff;display:block"><defs><pattern id="hatchOut" patternUnits="userSpaceOnUse" width="7" height="7" patternTransform="rotate(45)"><rect width="7" height="7" fill="#e6e6e6"/><line x1="0" y1="0" x2="0" y2="7" stroke="#444" stroke-width="2"/></pattern><pattern id="ownPat" patternUnits="userSpaceOnUse" width="8" height="8"><rect width="8" height="8" fill="#f2c2f2"/><circle cx="4" cy="4" r="1.1" fill="#8a0a8a"/></pattern></defs>
   ${headerSvg}
   ${mapBg}
   ${mapFrame}

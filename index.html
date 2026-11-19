@@ -649,6 +649,14 @@ function buildPrintPage(fieldName){
     const tf=theirData.features.find(f=>f.properties.short===short);
     if(tf) features.push(tf);
   });
+  // Під-зона без паїв (Молоківка): друкуємо намальований контур реального обробітку
+  if(!features.length && field.subzone_coords && field.subzone_coords.length>=3){
+    const ring=field.subzone_coords.slice();
+    if(ring[0][0]!==ring[ring.length-1][0]||ring[0][1]!==ring[ring.length-1][1]) ring.push(ring[0]);
+    const cLat=ring.reduce((a,c)=>a+c[1],0)/ring.length, cLon=ring.reduce((a,c)=>a+c[0],0)/ring.length;
+    features.push({type:'Feature',properties:{short:'Обробіток',owner:'обведено вручну',area:field.area,ftype:'own',center_lat:cLat,center_lon:cLon,links_to:[]},
+      geometry:{type:'MultiPolygon',coordinates:[[ring]]}});
+  }
   if(!features.length) return null;
 
   // Bounding box
@@ -1039,10 +1047,11 @@ function renderStats(){
     const exchOutS=f.shorts.filter(s=>parcelMap[s]&&parcelMap[s].ftype==='exchanged_out');
     const exchInS=(f.exchanges||[]).filter(s=>parcelMap[s]&&(parcelMap[s].ftype==='exchanged_in'||exchTheirSetS.has(s)));
     // ПРАВИЛЬНО: exchanged_in вже є в shorts, просто виключаємо exchanged_out
-    const factualF=f.shorts.reduce((a,s)=>{
+    let factualF=f.shorts.reduce((a,s)=>{
       const p=parcelMap[s];
       return p&&p.ftype!=='exchanged_out'?a+p.area:a;
     },0);
+    if(f.subzone && f.shorts.length===0) factualF=f.area;
     const hasDiff=Math.abs(factualF-f.area)>0.1;
     const exchDesc=(f.exchanges||[]).map(s=>{
       const op=exchOurMap[s], tp=exchTheirMap[s];

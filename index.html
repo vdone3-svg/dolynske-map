@@ -484,16 +484,18 @@ const theirGeoLayer=L.geoJSON(theirData,{
   }
 }).addTo(mainMap);
 
+// Шар під-зон (намальовані межі). Додається на карту ПІСЛЯ fitAll(), бо полігон без view ламає Leaflet
+const subzoneLayer=L.layerGroup();
 FIELDS.forEach(f=>{
-  // Для subzone-полів з намальованими координатами — рендеримо окремий полігон
+  // Для subzone-полів з намальованими координатами — окремий полігон
   if(f.subzone && f.subzone_coords && f.subzone_coords.length>=3){
     const latlngs=f.subzone_coords.map(c=>[c[1],c[0]]);
-    const subPoly=L.polygon(latlngs,{color:'#4a9eff',weight:2,fillColor:'#4a9eff',fillOpacity:0.12,dashArray:'6,3'}).addTo(mainMap);
-    subPoly.on('click',()=>printField(f.name));
+    const subPoly=L.polygon(latlngs,{color:'#4a9eff',weight:2.5,fill:false,dashArray:'6,4',interactive:false});
+    subzoneLayer.addLayer(subPoly);
     const lat=latlngs.reduce((a,p)=>a+p[0],0)/latlngs.length;
     const lon=latlngs.reduce((a,p)=>a+p[1],0)/latlngs.length;
-    const icon=L.divIcon({className:'field-label',html:`<div>${f.name}</div><div style="font-size:10px;font-weight:700;opacity:.85">${f.area.toFixed(0)} га</div>`,iconSize:[150,36],iconAnchor:[75,18]});
-    L.marker([lat,lon],{icon,interactive:true,zIndexOffset:500}).on('click',()=>printField(f.name)).addTo(mainMap);
+    const icon=L.divIcon({className:'field-label',html:`<div>${f.name}</div><div style="font-size:10px;font-weight:700;opacity:.85">${f.area.toFixed(2)} га</div>`,iconSize:[150,36],iconAnchor:[75,18]});
+    subzoneLayer.addLayer(L.marker([lat,lon],{icon,interactive:false,zIndexOffset:500}));
     return;
   }
   if(!fieldBounds[f.name])return;
@@ -508,6 +510,7 @@ function updateLabels(){const z=mainMap.getZoom();labels.forEach(m=>{z>=13?m.add
 mainMap.on('zoomend',updateLabels);
 function fitAll(){mainMap.invalidateSize();mainMap.fitBounds(mainGeoLayer.getBounds().extend(theirGeoLayer.getBounds()),{padding:[20,20]});}
 fitAll();setTimeout(fitAll,300);
+subzoneLayer.addTo(mainMap);
 
 // ===== ФАКТИЧНИЙ ШАР (ФАКТ) =====
 // Координати отримані з Fort Monitor (measurements.geojson) для поля 106

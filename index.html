@@ -294,13 +294,15 @@ function initRealMap(){
     {maxZoom:20,subdomains:['mt0','mt1','mt2','mt3'],attribution:'© Google'}).addTo(realMap);
   L.control.layers({"🛰 Супутник":L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:20,subdomains:['mt0','mt1','mt2','mt3']}),"🗺 Карта":L.tileLayer('https://{s}.tile.openstreetmap.org/{x}/{y}/{z}.png',{maxZoom:19})},null,{position:'topright'}).addTo(realMap);
   // Всі ділянки по договору
-  L.geoJSON(mainData,{style:f=>getStyle(f.properties),onEachFeature:(f,layer)=>{
-    layer.on('click',e=>layer.bindPopup(makePopup(f.properties),{maxWidth:300}).openPopup(e.latlng));
+  const realMainG=L.geoJSON(mainData,{style:f=>getStyle(f.properties),onEachFeature:(f,layer)=>{
+    layer.on('click',e=>layer.bindPopup(makePopup(f.properties,'real'),{maxWidth:300}).openPopup(e.latlng));
   }}).addTo(realMap);
-  L.geoJSON(theirData,{
+  const realTheirG=L.geoJSON(theirData,{
     style:()=>({color:'#0048cc',weight:2.5,fillColor:'#4488ff',fillOpacity:.45,dashArray:'8 4'}),
-    onEachFeature:(f,layer)=>{layer.on('click',e=>layer.bindPopup(makePopup(f.properties),{maxWidth:300}).openPopup(e.latlng));}
+    onEachFeature:(f,layer)=>{layer.on('click',e=>layer.bindPopup(makePopup(f.properties,'real'),{maxWidth:300}).openPopup(e.latlng));}
   }).addTo(realMap);
+  realMainG.eachLayer(l=>regParcel('real',l.feature.properties.short,l,realMainG));
+  realTheirG.eachLayer(l=>regParcel('real',l.feature.properties.short,l,realTheirG));
   // Фактичний шар поверх усього
   const factualRealLayer=L.geoJSON(FACTUAL_FIELDS,{
     style:()=>({color:'#FFD700',weight:4,fillColor:'#FFD700',fillOpacity:0.3,dashArray:'12 6'}),
@@ -426,7 +428,25 @@ function getStyle(p){
   return{color:'#2a8a2a',weight:1.5,fillColor:'#4caf50',fillOpacity:.45};
 }
 
-function makePopup(p){
+// Реєстр шарів паїв по картах: short -> {layer, group}
+const parcelReg={main:{},real:{}};
+function regParcel(mapId,short,layer,group){parcelReg[mapId][short]={layer,group};}
+function pLink(s,mapId){return `<a href="#" onclick="goToParcel('${s}','${mapId}');return false" title="Показати пай ${s} на карті" style="display:inline-block;margin:1px 2px;padding:1px 8px;border-radius:5px;background:#eef3ff;border:1.5px solid #3366cc;color:#1a3a9a;font-weight:800;text-decoration:none">${s} ➜</a>`;}
+function goToParcel(short,mapId){
+  const r=parcelReg[mapId]&&parcelReg[mapId][short]; if(!r){alert('Пай '+short+' не знайдено на карті');return;}
+  const m=mapId==='real'?realMap:mainMap;
+  m.closePopup();
+  const b=r.layer.getBounds();
+  m.fitBounds(b,{padding:[60,60],maxZoom:16});
+  m.once('moveend',()=>{
+    r.layer.setStyle({color:'#ffffff',weight:6,fillOpacity:.85});
+    if(r.layer.bringToFront) r.layer.bringToFront();
+    setTimeout(()=>{try{r.group.resetStyle(r.layer);if(mapId==='real'&&r.layer.bringToBack)r.layer.bringToBack();}catch(e){}},3000);
+    r.layer.bindPopup(makePopup(r.layer.feature.properties,mapId),{maxWidth:300}).openPopup(b.getCenter());
+  });
+}
+function makePopup(p,mapId){
+  mapId=mapId||'main';
   const isOut=p.ftype==='exchanged_out',isIn=p.ftype==='exchanged_in',own=isOwn(p.owner);
   let badge='',exchInfo='';
   if(isOut){
@@ -434,13 +454,13 @@ function makePopup(p){
     const theirsShort=exchOurMap[p.short];
     if(theirsShort){
       const tf=fieldOf(theirsShort.split('+')[0]);
-      exchInfo=`<div style="font-size:11px;color:#ff8855;margin-top:3px">↗ Натомість обробляємо <b>${theirsShort}</b>${tf?' (поле '+tf+')':''}</div>`;
+      exchInfo=`<div style="font-size:11px;color:#ff8855;margin-top:3px">↗ Натомість обробляємо ${theirsShort.split('+').map(t=>pLink(t,mapId)).join('+')}${tf?' (поле '+tf+')':''}</div>`;
     }
   } else if(isIn){
     badge='<span class="badge b-in2">⇄ Чужа → ми обробляємо</span>';
     const ourShorts=exchTheirMap[p.short];
     if(ourShorts&&ourShorts.length){
-      exchInfo=`<div style="font-size:11px;color:#88aaff;margin-top:3px">↙ Замість наших: <b>${ourShorts.join(', ')}</b>${ourShorts.map(s=>fieldOf(s)).filter(Boolean).length?' (поле '+[...new Set(ourShorts.map(s=>fieldOf(s)).filter(Boolean))].join('/')+')'  :''}</div>`;
+      exchInfo=`<div style="font-size:11px;color:#88aaff;margin-top:3px">↙ Замість наших: ${ourShorts.map(o=>pLink(o,mapId)).join(' ')}${ourShorts.map(s=>fieldOf(s)).filter(Boolean).length?' (поле '+[...new Set(ourShorts.map(s=>fieldOf(s)).filter(Boolean))].join('/')+')'  :''}</div>`;
     }
   } else if(own){
     badge='<span class="badge b-own">★ Власна</span>';
@@ -482,6 +502,8 @@ const theirGeoLayer=L.geoJSON(theirData,{
     labels.push(L.marker([p.center_lat,p.center_lon],{icon,interactive:false}));
   }
 }).addTo(mainMap);
+mainGeoLayer.eachLayer(l=>regParcel('main',l.feature.properties.short,l,mainGeoLayer));
+theirGeoLayer.eachLayer(l=>regParcel('main',l.feature.properties.short,l,theirGeoLayer));
 
 // Шар під-зон (намальовані межі). Додається на карту ПІСЛЯ fitAll(), бо полігон без view ламає Leaflet
 const subzoneLayer=L.layerGroup();

@@ -78,6 +78,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .po-btn-close{background:#3a0a0a;color:#ff8888;border:1.5px solid #6a1a1a}
 .po-btn-close:hover{background:#5a1a1a}
 .po-title{color:#ccc;font-size:14px;font-weight:700;flex:1}
+.po-modes{display:flex;border:1.5px solid #3a5a8a;border-radius:7px;overflow:hidden}
+.po-mode{background:#151c2a;color:#9fb4dd;border:0;padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer}
+.po-mode+.po-mode{border-left:1px solid #3a5a8a}
+.po-mode.active{background:#2a5ab0;color:#fff}
+.po-mode:disabled{opacity:.35;cursor:not-allowed}
 .po-body{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;padding:16px;background:#666}
 .po-body svg{box-shadow:0 4px 24px rgba(0,0,0,.5);display:block}
 
@@ -196,6 +201,11 @@ html,body{height:100%;overflow:hidden}
   <div class="po-toolbar">
     <button class="po-btn po-btn-print" onclick="window.print()">🖨 Друкувати A4</button>
     <button class="po-btn po-btn-close" onclick="closePrintOverlay()">✕ Закрити</button>
+    <div class="po-modes" id="po-modes">
+      <button class="po-mode" data-mode="contract" onclick="setPrintMode('contract')">📄 Договір</button>
+      <button class="po-mode" data-mode="fact" onclick="setPrintMode('fact')">🚜 Факт</button>
+      <button class="po-mode" data-mode="both" onclick="setPrintMode('both')">⧉ Разом</button>
+    </div>
     <div class="po-title" id="po-title"></div>
   </div>
   <div class="po-body" id="po-body"></div>
@@ -651,6 +661,18 @@ function closePrintOverlay(){document.getElementById('print-overlay').classList.
 
 // ===== SVG PRINT ENGINE =====
 
+// Сторони контуру для друку: зливає майже прямі відрізки (<20°), повертає довжину (м) і середину кожної сторони ≥60 м
+function printSides(ring){
+  const R=6371000,rad=Math.PI/180;
+  const dist=(a,b)=>{const dLa=(b[1]-a[1])*rad,dLo=(b[0]-a[0])*rad,h=Math.sin(dLa/2)**2+Math.cos(a[1]*rad)*Math.cos(b[1]*rad)*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h));};
+  const brg=(a,b)=>Math.atan2(b[1]-a[1],(b[0]-a[0])*Math.cos(a[1]*rad))*180/Math.PI;
+  const ad=(x,y)=>{let d=Math.abs(x-y)%360;return d>180?360-d:d;};
+  const seg=[];for(let i=0;i<ring.length-1;i++){const d=dist(ring[i],ring[i+1]);if(d>0.5)seg.push({a:ring[i],c:ring[i+1],d,b:brg(ring[i],ring[i+1])});}
+  const sides=[];seg.forEach(sg=>{const l=sides[sides.length-1];if(l&&ad(l.b,sg.b)<20){l.parts.push(sg);l.d+=sg.d;}else sides.push({parts:[sg],d:sg.d,b:sg.b});});
+  if(sides.length>1){const f=sides[0],l=sides[sides.length-1];if(ad(f.b,l.b)<20){f.parts=l.parts.concat(f.parts);f.d+=l.d;sides.pop();}}
+  return sides.filter(sd=>sd.d>=60).map(sd=>{let h=sd.d/2,mid=sd.parts[0].a;for(const p of sd.parts){if(h<=p.d){const t=h/p.d;mid=[p.a[0]+(p.c[0]-p.a[0])*t,p.a[1]+(p.c[1]-p.a[1])*t];break;}h-=p.d;}return {d:sd.d,mid};});
+}
+
 // Різниця «договір ↔ факт» для друку. Повертає null, якщо контуру немає або turf не завантажився.
 function buildFactOverlay(features,factFeats,fieldExchOut){
   if(!factFeats.length||typeof turf==='undefined') return null;
@@ -672,7 +694,8 @@ function buildFactOverlay(features,factFeats,fieldExchOut){
   }catch(e){console.warn('fact overlay',e);return null;}
 }
 
-function buildPrintPage(fieldName){
+function buildPrintPage(fieldName,mode){
+  mode=mode||'contract';
   const field=FIELDS.find(f=>f.name===fieldName);
   if(!field) return null;
 
@@ -703,8 +726,9 @@ function buildPrintPage(fieldName){
   if(!features.length) return null;
 
   // ---- Реальний обробіток: контур + різниця з договором (варіант А) ----
-  const factFeats=(!field.subzone && typeof FACTUAL_FIELDS!=='undefined')?FACTUAL_FIELDS.filter(f=>f&&f.properties&&f.properties.field===fieldName):[];
-  const fact=buildFactOverlay(features,factFeats,fieldExchOut);
+  const factFeats=(mode!=='contract' && !field.subzone && typeof FACTUAL_FIELDS!=='undefined')?FACTUAL_FIELDS.filter(f=>f&&f.properties&&f.properties.field===fieldName):[];
+  const fact=factFeats.length?buildFactOverlay(features,factFeats,fieldExchOut):null;
+  const factOnly=mode==='fact'&&!!fact;
 
   // Bounding box
   let minLon=Infinity,maxLon=-Infinity,minLat=Infinity,maxLat=-Infinity;
@@ -757,7 +781,7 @@ function buildPrintPage(fieldName){
     }
   });
 
-  const EXCH_H=exchLines.length>0?(14+exchLines.length*16+8):0;
+  const EXCH_H=(!factOnly&&exchLines.length>0)?(14+exchLines.length*16+8):0;
 
   // Table rows
   const ownParcels=features.filter(f=>isOwn(f.properties.owner));
@@ -818,6 +842,10 @@ function buildPrintPage(fieldName){
     const rings=geom.type==='Polygon'?[geom.coordinates[0]]:geom.coordinates.map(poly=>poly[0]);
     const fill=fillColor(p),stroke=strokeColor(p);
     const sdash=fieldExchIn.has(p.short)||p.ftype==='exchanged_in'?'stroke-dasharray="8 4"':'';
+    if(factOnly){ // режим «Факт»: паї лише тонкими сірими межами, без підписів
+      rings.forEach(ring=>{svgPolygons+=`<polygon points="${ringToPoints(ring)}" fill="none" stroke="#b0b0b0" stroke-width="0.8"/>`;});
+      return;
+    }
     rings.forEach(ring=>{
       svgPolygons+=`<polygon points="${ringToPoints(ring)}" fill="${fill}" stroke="${stroke}" stroke-width="${isOwn(p.owner)?2.4:1.8}" ${sdash}${(fieldExchOut.has(p.short)||p.ftype==='exchanged_out')?' stroke-dasharray="3 2"':''} fill-opacity="0.92"/>`;
     });
@@ -838,6 +866,14 @@ function buildPrintPage(fieldName){
   if(fact){
     const ringsOf=g=>g.type==='Polygon'?[g.coordinates]:g.coordinates;
     const polyPath=poly=>poly.map(r=>'M'+r.map(([lo,la])=>proj(lo,la).map(v=>v.toFixed(1)).join(',')).join('L')+'Z').join(' ');
+    if(factOnly){
+      factFeats.forEach(f=>{ringsOf(f.geometry).forEach(poly=>{const d=polyPath(poly);
+        svgFact+=`<path d="${d}" fill="#d9ecff" fill-opacity=".55" fill-rule="evenodd" stroke="#000" stroke-width="2.6" stroke-linejoin="round"/>`;
+        poly.forEach(ring=>{printSides(ring).forEach(sd=>{const [x,y]=proj(sd.mid[0],sd.mid[1]);
+          svgFact+=`<text x="${x.toFixed(1)}" y="${(y+4).toFixed(1)}" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="900" fill="#000" paint-order="stroke" stroke="#fff" stroke-width="3.5">${Math.round(sd.d)} м</text>`;});});});
+        const c=turf.centerOfMass(f).geometry.coordinates;const [cx,cy]=proj(c[0],c[1]);
+        svgFact+=`<text x="${cx}" y="${cy}" text-anchor="middle" font-family="Arial,sans-serif" font-size="18" font-weight="900" fill="#003a8c" paint-order="stroke" stroke="#fff" stroke-width="4">${(turf.area(f)/1e4).toFixed(2)} га</text>`;});
+    } else {
     fact.notWorked.forEach(pc=>{ringsOf(pc.geometry).forEach(poly=>{svgFact+=`<path d="${polyPath(poly)}" fill="url(#notWorkedPat)" fill-rule="evenodd" stroke="#000" stroke-width="1.2" stroke-dasharray="2 2"/>`;});});
     fact.extra.forEach(pc=>{ringsOf(pc.geometry).forEach(poly=>{svgFact+=`<path d="${polyPath(poly)}" fill="url(#extraPat)" fill-rule="evenodd" stroke="#0050d0" stroke-width="1.2"/>`;});});
     factFeats.forEach(f=>{ringsOf(f.geometry).forEach(poly=>{const d=polyPath(poly);
@@ -846,6 +882,7 @@ function buildPrintPage(fieldName){
       svgFact+=`<text x="${x}" y="${y}" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="900" fill="${col}" paint-order="stroke" stroke="#fff" stroke-width="3">${txt} ${pc.ha.toFixed(2)}</text>`;};
     fact.notWorked.forEach(pc=>pieceLbl(pc,'✕','#000'));
     fact.extra.forEach(pc=>pieceLbl(pc,'+','#0040b0'));
+    }
   }
 
   // Legend (top-right corner of map)
@@ -855,7 +892,11 @@ function buildPrintPage(fieldName){
     {fill:'#b8b8ff',stroke:'#1a1aaa',dash:'stroke-dasharray="6 3"',label:'⇄ Обмін (отримали)'},
     {fill:'url(#hatchOut)',stroke:'#222222',dash:'stroke-dasharray="2 2"',label:'⇄ Обмін (віддали)'},
   ];
-  if(fact){
+  if(factOnly){
+    legendItems.length=0;
+    legendItems.push({fill:'#d9ecff',stroke:'#000',dash:'stroke-width="2.5"',label:'Реальний обробіток'});
+    legendItems.push({fill:'none',stroke:'#b0b0b0',dash:'',label:'Межі паїв'});
+  } else if(fact){
     legendItems.push({fill:'none',stroke:'#000',dash:'stroke-dasharray="5 2" stroke-width="2.5"',label:'Реальний обробіток'});
     legendItems.push({fill:'url(#notWorkedPat)',stroke:'#000',dash:'stroke-dasharray="2 2"',label:'✕ Не обробляємо'});
     legendItems.push({fill:'url(#extraPat)',stroke:'#0050d0',dash:'',label:'+ Поза договором'});
@@ -884,14 +925,14 @@ function buildPrintPage(fieldName){
 
   const headerSvg=`
     <rect x="0" y="0" width="${pageW}" height="${HEADER_H}" fill="#1e2a4a"/>
-    <text x="12" y="22" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">🌾 Поле ${fieldName}</text>
+    <text x="12" y="22" font-family="Arial,sans-serif" font-size="17" font-weight="900" fill="#fff">🌾 Поле ${fieldName}${mode==='fact'&&fact?' — реальний обробіток':mode==='both'&&fact?' — договір і факт':''}</text>
     <text x="${pageW-10}" y="13" text-anchor="end" font-family="Arial,sans-serif" font-size="9.5" fill="#c8d0e8">${field.area.toFixed(2)} га · ${field.shorts.length} ділянок</text>
     <text x="${pageW-10}" y="27" text-anchor="end" font-family="Arial,sans-serif" font-size="8.5" fill="#a8b4d4">★ власних: ${ownArea.toFixed(2)} га  ·  ⇄ обмін: ${exchArea.toFixed(2)} га  ·  оренда: ${rentArea.toFixed(2)} га</text>`;
 
   // ---- EXCHANGE INFO BLOCK ----
   let exchBlockSvg='';
   const exchY=HEADER_H+MAP_H;
-  if(exchLines.length>0){
+  if(!factOnly&&exchLines.length>0){
     exchBlockSvg+=`<rect x="0" y="${exchY}" width="${pageW}" height="${EXCH_H}" fill="#f0f4ff"/>`;
     exchBlockSvg+=`<text x="10" y="${exchY+13}" font-family="Arial,sans-serif" font-size="10" font-weight="700" fill="#0044cc">⇄ Обміни по полю:</text>`;
     exchLines.forEach((line,i)=>{
@@ -909,7 +950,9 @@ function buildPrintPage(fieldName){
   let sumSvg='';
   if(fact){
     const sy=HEADER_H+MAP_H+EXCH_H;
-    sumSvg=`<rect x="0" y="${sy}" width="${pageW}" height="${SUM_H}" fill="#eef0f4"/><text x="10" y="${sy+13}" font-family="Arial,sans-serif" font-size="10.5" fill="#111"><tspan font-weight="900">Договір (з обмінами): ${fact.plannedHa.toFixed(2)} га</tspan>  ·  <tspan font-weight="900">Факт: ${fact.factHa.toFixed(2)} га</tspan> (${fact.source})  ·  ✕ не обробляємо: <tspan font-weight="900">${fact.notWorkedHa.toFixed(2)} га</tspan>  ·  + поза договором: <tspan font-weight="900" fill="#0040b0">${fact.extraHa.toFixed(2)} га</tspan></text>`;
+    sumSvg=factOnly
+      ? `<rect x="0" y="${sy}" width="${pageW}" height="${SUM_H}" fill="#eef0f4"/><text x="10" y="${sy+13}" font-family="Arial,sans-serif" font-size="10.5" fill="#111"><tspan font-weight="900">Реально обробляємо: ${fact.factHa.toFixed(2)} га</tspan> (${fact.source})  ·  за договором з обмінами: ${fact.plannedHa.toFixed(2)} га  ·  різниця: ${(fact.factHa-fact.plannedHa>=0?'+':'')}${(fact.factHa-fact.plannedHa).toFixed(2)} га</text>`
+      : `<rect x="0" y="${sy}" width="${pageW}" height="${SUM_H}" fill="#eef0f4"/><text x="10" y="${sy+13}" font-family="Arial,sans-serif" font-size="10.5" fill="#111"><tspan font-weight="900">Договір (з обмінами): ${fact.plannedHa.toFixed(2)} га</tspan>  ·  <tspan font-weight="900">Факт: ${fact.factHa.toFixed(2)} га</tspan> (${fact.source})  ·  ✕ не обробляємо: <tspan font-weight="900">${fact.notWorkedHa.toFixed(2)} га</tspan>  ·  + поза договором: <tspan font-weight="900" fill="#0040b0">${fact.extraHa.toFixed(2)} га</tspan></text>`;
   }
 
   let tableSvg=`<g transform="translate(${tableX},${tableStartY})">`;
@@ -975,11 +1018,19 @@ function buildPrintPage(fieldName){
   return {svg:svgContent, landscape, pageW, pageH};
 }
 
-function printField(name){
+let printFieldName=null, printMode='contract';
+function setPrintMode(m){printMode=m; if(printFieldName) printField(printFieldName,true);}
+function printField(name,keepMode){
   if(!name){openPrintSelector();return;}
-  const result=buildPrintPage(name);
+  if(!keepMode) printMode='contract';
+  printFieldName=name;
+  const fld=FIELDS.find(f=>f.name===name);
+  const hasFact=!!(fld&&!fld.subzone&&typeof FACTUAL_FIELDS!=='undefined'&&FACTUAL_FIELDS.some(f=>f&&f.properties&&f.properties.field===name));
+  if(!hasFact) printMode='contract';
+  document.querySelectorAll('#po-modes .po-mode').forEach(b=>{b.classList.toggle('active',b.dataset.mode===printMode);b.disabled=!hasFact&&b.dataset.mode!=='contract';b.title=b.disabled?'Для цього поля немає контуру реального обробітку':'';});
+  const result=buildPrintPage(name,printMode);
   if(!result){alert('Немає даних для поля '+name);return;}
-  document.getElementById('po-title').textContent='Поле '+name+' — '+(result.landscape?'Альбом (A4)':'Портрет (A4)');
+  document.getElementById('po-title').textContent='Поле '+name+' — '+({contract:'по договору',fact:'реальний обробіток',both:'договір + факт'}[printMode])+' · '+(result.landscape?'альбом A4':'портрет A4');
   document.getElementById('po-body').innerHTML=result.svg;
   (function(){const L=result.landscape;let st=document.getElementById('page-style');
    if(!st){st=document.createElement('style');st.id='page-style';document.head.appendChild(st);}
